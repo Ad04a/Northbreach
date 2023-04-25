@@ -28,10 +28,10 @@ void UServerSubsystem::CreateDedicatedServerSession(FString InMapPath)
 	SessionCreationSettings.bAllowJoinViaPresence = false;
 	SessionCreationSettings.bAllowJoinViaPresenceFriendsOnly = false;
 
-	SessionCreationSettings.Set(SEARCH_KEYWORDS, FString("Northbreach"), EOnlineDataAdvertisementType::ViaOnlineService);
+	SessionCreationSettings.Set(SEARCH_KEYWORDS, SessionIdentifier.ToString(), EOnlineDataAdvertisementType::ViaOnlineService);
 
 	SessionPtr->OnCreateSessionCompleteDelegates.AddUObject(this, &UServerSubsystem::OnSessionCreationReply);
-	SessionPtr->CreateSession(0, FName("Northbreach"), SessionCreationSettings);
+	SessionPtr->CreateSession(0, SessionIdentifier, SessionCreationSettings);
 }
 
 
@@ -62,17 +62,20 @@ void UServerSubsystem::FindSessionAndJoin()
 		UE_LOG(LogTemp, Error, TEXT("UServerSubsystem::FindSessionAndJoin SessionPtr == false"));
 		return;
 	}
+	SessionSearch = MakeShareable(new FOnlineSessionSearch());
 
-	SessionSearch.QuerySettings.Set(SEARCH_KEYWORDS, true,  EOnlineComparisonOp::Equals);
-	SessionSearch.bIsLanQuery = false;
-
+	SessionSearch->QuerySettings.Set(SEARCH_KEYWORDS, SessionIdentifier.ToString(), EOnlineComparisonOp::Equals);
+	SessionSearch->bIsLanQuery = false;
+	UE_LOG(LogTemp, Display, TEXT("Searhing session"));
 	SessionPtr->OnFindSessionsCompleteDelegates.AddUObject(this, &UServerSubsystem::OnSessionFoundSuccess);
+	SessionPtr->FindSessions(0, SessionSearch.ToSharedRef());
 }
 
 void UServerSubsystem::OnSessionFoundSuccess(bool bWasSuccess)
 {
 	if (bWasSuccess == false)
 	{
+		UE_LOG(LogTemp, Error, TEXT("UServerSubsystem::OnSessionFoundSuccess Cannot join session"));
 		return;
 	}
 	IOnlineSessionPtr SessionPtr = Online::GetSessionInterface();
@@ -81,13 +84,26 @@ void UServerSubsystem::OnSessionFoundSuccess(bool bWasSuccess)
 		UE_LOG(LogTemp, Error, TEXT("UServerSubsystem::FindSessionAndJoin SessionPtr == false"));
 		return;
 	}
-	if (SessionSearch.SearchResults[0].IsValid() == false)
+	if (SessionSearch.IsValid() == false)
+	{
+		UE_LOG(LogTemp, Error, TEXT("UServerSubsystem::FindSessionAndJoin SessionSearch.IsValid() == false"));
+		return;
+	}
+	UE_LOG(LogTemp, Display, TEXT("%d sessions found"), SessionSearch->SearchResults.Num());
+	if (SessionSearch->SearchResults.Num() < 1)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Canceling operation"));
+		return;
+	}
+	
+	if (SessionSearch->SearchResults[0].IsValid() == false)
 	{
 		UE_LOG(LogTemp, Error, TEXT("UServerSubsystem::FindSessionAndJoin SessionSearch->SearchResult[0].IsValid() == false"));
 		return;
 	}
+	UE_LOG(LogTemp, Display, TEXT("Trying to join session"));
 	SessionPtr->OnJoinSessionCompleteDelegates.AddUObject(this, &UServerSubsystem::OnJoinSessionComplete);
-	SessionPtr->JoinSession(0, FName("Northbreach"), SessionSearch.SearchResults[0]);
+	SessionPtr->JoinSession(0, SessionIdentifier, SessionSearch->SearchResults[0]);
 }
 
 void UServerSubsystem::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
@@ -97,6 +113,7 @@ void UServerSubsystem::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCo
 		UE_LOG(LogTemp, Error, TEXT("UServerSubsystem::OnJoinSessionComplete Cannot join session"));
 		return;
 	}
+	UE_LOG(LogTemp, Display, TEXT("Joining session"));
 	FString JoinAdress;
 	IOnlineSessionPtr SessionPtr = Online::GetSessionInterface();
 	if (SessionPtr.IsValid() == false)

@@ -29,7 +29,10 @@ public:
 
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 
-	FOnlineSessionSearch SessionSearch;
+	TSharedPtr<FOnlineSessionSearch> SessionSearch;
+
+	UPROPERTY()
+	FName SessionIdentifier = "Northbreach";
 
 	UPROPERTY()
 	FString MapPath;
